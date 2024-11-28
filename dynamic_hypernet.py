@@ -35,36 +35,27 @@ import numpy as np
 #             out = self.functional(params, x, *args, **kwargs)
 #             return out
 
-# Instead of:
-# from functorch import make_functional
-
-# Use:
 import torch.func
 
 class FunctionalParamVectorWrapper(nn.Module):
     def __init__(self, module: nn.Module):
         super(FunctionalParamVectorWrapper, self).__init__()
         self.module = module
-        # Remove the make_functional call
-        # self.functional, _ = make_functional(module)
 
     def forward(self, param_vector: torch.Tensor, x: torch.Tensor, *args, **kwargs):
         params = {}
         start = 0
         considered = self.module.only_here if isinstance(self.module, HyperNet) else self.module.parameters()
         
-        # Create a state dict-like structure
         for name, p in self.module.named_parameters():
             end = start + np.prod(p.size())
             params[name] = param_vector[start:end].view(p.size())
             start = end
 
         if isinstance(self.module, HyperNet):
-            # Use torch.func.functional_call instead
             out = torch.func.functional_call(self.module, params, (x,))
             return self.module.propagate(out, x, *args, **kwargs)
         else:
-            # Use torch.func.functional_call instead
             out = torch.func.functional_call(self.module, params, (x, *args), kwargs)
             return out
 
