@@ -10,9 +10,6 @@ class BaseNet(nn.Module):
         self.connection_type = connection_type
         self.device = device
 
-        # self.create_params()
-        # self.num_weight_gen_params = sum(p.numel() for p in self.weight_generator.parameters())
-
     def create_params(self):
         raise NotImplementedError("Subclasses implement this method to initialize the weight generator network.")
 
