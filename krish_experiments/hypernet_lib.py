@@ -9,6 +9,7 @@ class BaseNet(nn.Module):
         self.num_backward_connections = num_backward_connections
         self.connection_type = connection_type
         self.device = device
+        self.res_connection_vector = nn.Parameter(torch.randn(num_backward_connections, device=device, requires_grad=True))
 
     def create_params(self):
         raise NotImplementedError("Subclasses implement this method to initialize the weight generator network.")
@@ -20,11 +21,32 @@ class HyperNet(BaseNet):
         self._target_network = target_network
 
 class SharedEmbeddingUpdateParams(nn.Module):
+    """This class updates the parameters of the target network using the output of the previous weight generator."""
     def __init__(self, module: nn.Module):
+        """This function initializes the class
+
+        Args:
+            module (nn.Module): The target network whose parameters are to be updated
+        """
         super().__init__()
         self.module = module
 
     def forward(self, prev_params, param_vector: torch.Tensor, raw: torch.Tensor, embed: torch.Tensor, *args, **kwargs):
+        """This function updates the parameters of the target network using the output of the weight generator,
+        the previous parameters, the raw data, and the embedding, and propagates the updated parameters.
+
+        Args:
+            prev_params (list): a list of previous parameters
+            param_vector (torch.Tensor): the output of the weight generator
+            raw (torch.Tensor): the raw data
+            embed (torch.Tensor): the embedding
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            _type_: _description_
+        """
         if self.module.connection_type == "avg":
             pool_layer = nn.AdaptiveAvgPool1d(param_vector.shape[0])
         elif self.module.connection_type == "max":
@@ -44,7 +66,8 @@ class SharedEmbeddingUpdateParams(nn.Module):
         for name, p in self.module.weight_generator.named_parameters():
             end = start + np.prod(p.size())
             params[name] = param_vector[start:end].view(p.size())
-            for addition_vector in addition_vectors:
+            for i, addition_vector in enumerate(addition_vectors):
+                addition_vector *= self.module.res_connection_vector[i]
                 params[name] += addition_vector[start:end].view(p.size())
             start = end
         
@@ -52,6 +75,7 @@ class SharedEmbeddingUpdateParams(nn.Module):
             assert embed.shape == (self.module.num_embeddings, *self.module.embedding_dim)
 
             out = torch.func.functional_call(self.module.weight_generator, params, (embed,))
+            # Propagate the updated parameters
             return self.module.propagate(prev_params, out, raw, embed, *args, **kwargs)
         elif isinstance(self.module, BaseNet):
             assert raw.shape[1:] == self.module.input_dim
@@ -69,6 +93,7 @@ class SharedEmbeddingHyperNet(HyperNet):
     def __init__(self, target_network, num_backward_connections=0, connection_type="avg", device="cpu"):
         super().__init__(target_network, num_backward_connections, connection_type, device)
         self.target_param_updater = SharedEmbeddingUpdateParams(target_network)
+        self.res_connection_vector = nn.Parameter(torch.randn(num_backward_connections, device=device, requires_grad=True))
 
     def propagate_forward(self, raw, embed, *args, **kwargs):
         assert embed.shape == (self.num_embeddings, *self.embedding_dim)

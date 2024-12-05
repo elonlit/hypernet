@@ -9,7 +9,7 @@ from avalanche.benchmarks.classic import (
     SplitCIFAR100,
     SplitTinyImageNet,
     SplitOmniglot,
-    CORe50
+    SplitCORe50
 )
 from avalanche.evaluation.metrics import forgetting_metrics, accuracy_metrics, loss_metrics
 from avalanche.logging import InteractiveLogger, TextLogger

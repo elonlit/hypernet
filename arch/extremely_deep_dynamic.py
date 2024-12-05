@@ -1,3 +1,10 @@
+"""
+This file tests how deep we can go using the dynamic hypernet approach on MNIST.
+Using n = 7 hypernets.
+
+Run using `python -m arch.extremely_deep_dynamic` from the root directory.
+"""
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -10,14 +17,16 @@ import torch.func
 from math import ceil
 from itertools import chain
 
-from hypernet_lib import BaseNet, SharedEmbeddingHyperNet, DynamicSharedEmbedding
+from krish_experiments.hypernet_lib import BaseNet, SharedEmbeddingHyperNet, DynamicSharedEmbedding
 
 class Lowest(BaseNet):
     def create_params(self):
         self.weight_generator = nn.Sequential(
             nn.Flatten(),
-            nn.ReLU(),
-            nn.Linear(784, 10),
+            nn.GELU(),
+            nn.Linear(784, 100),
+            nn.GELU(),
+            nn.Linear(100, 10),
         )
 
 class AvgPoolHyperNet(SharedEmbeddingHyperNet):
@@ -120,11 +129,19 @@ print(f"Device: {device}")
 # we only connect min(2, # of hypernets above) - so in `OneUp`
 # we only connection `top`'s parameters and in `TwoUp` we 
 # don't connect any parameters (since no hypernet above)
-base = Lowest(num_backward_connections=2).to(device)
-one = AvgPoolHyperNet(base, 8, num_backward_connections=2).to(device)
-two = AvgPoolHyperNet(one, 3, num_backward_connections=2).to(device)
+base = Lowest(num_backward_connections=5).to(device)
+one = AvgPoolHyperNet(base, 4, num_backward_connections=4).to(device)
+two = AvgPoolHyperNet(one, 4, num_backward_connections=3).to(device)
+three = AvgPoolHyperNet(two, 4, num_backward_connections=2).to(device)
+four = AvgPoolHyperNet(three, 4, num_backward_connections=2).to(device)
+five = AvgPoolHyperNet(four, 4, num_backward_connections=2).to(device)
+six = AvgPoolHyperNet(five, 4, num_backward_connections=4).to(device)
+seven = AvgPoolHyperNet(six, 4, num_backward_connections=3).to(device)
+eight = AvgPoolHyperNet(seven, 4, num_backward_connections=2).to(device)
+nine = AvgPoolHyperNet(eight, 4, num_backward_connections=2).to(device)
+ten = AvgPoolHyperNet(nine, 4, num_backward_connections=2).to(device)
 
-embed = LinearSharedEmbedding(two, input_shape=(64, 1, 28, 28)).to(device)
+embed = LinearSharedEmbedding(ten, input_shape=(64, 1, 28, 28)).to(device)
 
 morph = transforms.Compose([transforms.ToTensor()])
 
@@ -137,50 +154,22 @@ test_loader = torch.utils.data.DataLoader(test_set, batch_size=64, shuffle=False
 print(f"Base network parameters: {base.num_weight_gen_params}")
 print(f"One hypernetwork parameters: {one.num_weight_gen_params}")
 print(f"Two hypernetwork parameters: {two.num_weight_gen_params}")
+print(f"Three hypernetwork parameters: {three.num_weight_gen_params}")
+print(f"Four hypernetwork parameters: {four.num_weight_gen_params}")
+print(f"Five hypernetwork parameters: {five.num_weight_gen_params}")
+print(f"Six hypernetwork parameters: {six.num_weight_gen_params}")
+print(f"Seven hypernetwork parameters: {seven.num_weight_gen_params}")
+print(f"Eight hypernetwork parameters: {eight.num_weight_gen_params}")
+print(f"Nine hypernetwork parameters: {nine.num_weight_gen_params}")
+print(f"Ten hypernetwork parameters: {ten.num_weight_gen_params}")
 print(f"Embed hypernetwork parameters: {embed.num_weight_gen_params}")
 
 num_epochs = 25
 tq = tqdm(range(num_epochs))
 
 # Train the hypernetwork
-# trainable_params = chain(embed.weight_generator.parameters(), two.weight_generator.parameters(), two.res_connection_vector, one.res_connection_vector, base.res_connection_vector)
-trainable_params = [p for p in chain(embed.weight_generator.parameters(), two.weight_generator.parameters(), [two.res_connection_vector], [one.res_connection_vector], [base.res_connection_vector]) if p.is_leaf]
-# for param in trainable_params:
-#     print(param.is_leaf)
-def print_optimized_parameters(optimizer):
-    print("Parameters being optimized:")
-    for i, param_group in enumerate(optimizer.param_groups):
-        print(f"Parameter group {i}:")
-        for j, p in enumerate(param_group['params']):
-            if p.requires_grad:
-                print(f"  Parameter {j}:")
-                print(f"    Shape: {p.shape}")
-                print(f"    Data type: {p.dtype}")
-                print(f"    Device: {p.device}")
-                
-                # Try to find the name of the parameter
-                for name, param in chain(embed.named_parameters(), 
-                                         two.named_parameters(), 
-                                         one.named_parameters(), 
-                                         base.named_parameters()):
-                    if param is p:
-                        print(f"    Name: {name}")
-                        break
-                else:
-                    print("    Name: Unknown")
-                
-                print(f"    Requires grad: {p.requires_grad}")
-                print()
-
-
-
-
-
-
-optimizer = optim.AdamW(trainable_params, lr=1e-2, weight_decay=1e-3)
-# Call the function to print the parameters
-print_optimized_parameters(optimizer)
-
+trainable_params = chain(embed.weight_generator.parameters(), ten.weight_generator.parameters())
+optimizer = optim.AdamW(trainable_params, lr=1e-3, weight_decay=1e-3)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
 
 for ep in tq:

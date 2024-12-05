@@ -112,7 +112,7 @@ class TwoUp(HyperNet):
             nn.ReLU(),
             nn.Linear(16, self.weight_chunk_dim)
         )
-    
+        
     def forward(self):
         return self.weight_generator(self.embedding(self.context))
 
