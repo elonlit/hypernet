@@ -129,19 +129,16 @@ print(f"Device: {device}")
 # we only connect min(2, # of hypernets above) - so in `OneUp`
 # we only connection `top`'s parameters and in `TwoUp` we 
 # don't connect any parameters (since no hypernet above)
-base = Lowest(num_backward_connections=5).to(device)
-one = AvgPoolHyperNet(base, 4, num_backward_connections=4).to(device)
-two = AvgPoolHyperNet(one, 4, num_backward_connections=3).to(device)
-three = AvgPoolHyperNet(two, 4, num_backward_connections=2).to(device)
-four = AvgPoolHyperNet(three, 4, num_backward_connections=2).to(device)
+base = Lowest(num_backward_connections=7).to(device)
+one = AvgPoolHyperNet(base, 4, num_backward_connections=6).to(device)
+two = AvgPoolHyperNet(one, 4, num_backward_connections=5).to(device)
+three = AvgPoolHyperNet(two, 4, num_backward_connections=4).to(device)
+four = AvgPoolHyperNet(three, 4, num_backward_connections=3).to(device)
 five = AvgPoolHyperNet(four, 4, num_backward_connections=2).to(device)
-six = AvgPoolHyperNet(five, 4, num_backward_connections=4).to(device)
-seven = AvgPoolHyperNet(six, 4, num_backward_connections=3).to(device)
-eight = AvgPoolHyperNet(seven, 4, num_backward_connections=2).to(device)
-nine = AvgPoolHyperNet(eight, 4, num_backward_connections=2).to(device)
-ten = AvgPoolHyperNet(nine, 4, num_backward_connections=2).to(device)
+six = AvgPoolHyperNet(five, 4, num_backward_connections=2).to(device)
+seven = AvgPoolHyperNet(six, 4, num_backward_connections=2).to(device)
 
-embed = LinearSharedEmbedding(ten, input_shape=(64, 1, 28, 28)).to(device)
+embed = LinearSharedEmbedding(seven, input_shape=(64, 1, 28, 28)).to(device)
 
 morph = transforms.Compose([transforms.ToTensor()])
 
@@ -159,16 +156,17 @@ print(f"Four hypernetwork parameters: {four.num_weight_gen_params}")
 print(f"Five hypernetwork parameters: {five.num_weight_gen_params}")
 print(f"Six hypernetwork parameters: {six.num_weight_gen_params}")
 print(f"Seven hypernetwork parameters: {seven.num_weight_gen_params}")
-print(f"Eight hypernetwork parameters: {eight.num_weight_gen_params}")
-print(f"Nine hypernetwork parameters: {nine.num_weight_gen_params}")
-print(f"Ten hypernetwork parameters: {ten.num_weight_gen_params}")
 print(f"Embed hypernetwork parameters: {embed.num_weight_gen_params}")
 
 num_epochs = 25
 tq = tqdm(range(num_epochs))
 
 # Train the hypernetwork
-trainable_params = chain(embed.weight_generator.parameters(), ten.weight_generator.parameters())
+trainable_params = chain(embed.weight_generator.parameters(), seven.weight_generator.parameters(),
+                        [seven.res_connection_vector], [six.res_connection_vector], [five.res_connection_vector],
+                        [four.res_connection_vector], [three.res_connection_vector], [two.res_connection_vector],
+                        [one.res_connection_vector], [base.res_connection_vector])
+
 optimizer = optim.AdamW(trainable_params, lr=1e-3, weight_decay=1e-3)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
 
