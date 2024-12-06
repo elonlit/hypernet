@@ -233,7 +233,6 @@ class HierarchicalRegularizedLoss(nn.Module):
 
         # Combine all terms
         total_loss = ce_loss + \
-                     self.alpha * embed_reg + \
                      self.beta * four_reg + \
                      self.beta * three_reg + \
                      self.beta * two_reg + \
