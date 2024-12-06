@@ -126,7 +126,7 @@ class LinearSharedEmbedding(DynamicSharedEmbedding):
 
         self.weight_generator = WeightGenerator(self.batch_size)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 print(f"Device: {device}")
 
 # we can set num_backward_connection=2 because in the library,
