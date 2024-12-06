@@ -27,9 +27,9 @@ class Lowest(BaseNet):
     def create_params(self):
         self.weight_generator = nn.Sequential(
             nn.Flatten(),
-            nn.GELU(),
+            nn.ReLU(),
             nn.Linear(784, 100),
-            nn.GELU(),
+            nn.ReLU(),
             nn.Linear(100, 10),
         )
 
