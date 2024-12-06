@@ -1,6 +1,6 @@
 """
 This file tests how deep we can go using the dynamic hypernet approach on MNIST.
-Using n = 7 hypernets.
+Using n = 4 hypernets.
 
 Run using `python -m arch.extremely_deep_dynamic` from the root directory.
 """

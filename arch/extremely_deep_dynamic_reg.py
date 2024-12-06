@@ -190,8 +190,8 @@ def print_optimized_parameters(optimizer):
                 print(f"    Requires grad: {p.requires_grad}")
                 print()
 
-#optimizer = optim.AdamW(trainable_params, lr=1e-3, weight_decay=1e-3)
-optimizer = optim.Adam(trainable_params, lr=1e-3)
+optimizer = optim.AdamW(trainable_params, lr=1e-3, weight_decay=0)
+# optimizer = optim.Adam(trainable_params, lr=1e-3)
 # Call the function to print the parameters
 print_optimized_parameters(optimizer)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
