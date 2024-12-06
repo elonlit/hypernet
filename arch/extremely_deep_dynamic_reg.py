@@ -20,6 +20,8 @@ from itertools import chain
 from torch.nn.utils import parameters_to_vector
 
 from krish_experiments.hypernet_lib import BaseNet, SharedEmbeddingHyperNet, DynamicSharedEmbedding
+torch.manual_seed(7)
+np.random.seed(7)
 
 class Lowest(BaseNet):
     def create_params(self):
@@ -223,7 +225,7 @@ class HierarchicalRegularizedLoss(nn.Module):
         one_reg = torch.norm(parameters_to_vector(one), p=2)
 
         # L2 regularization for the base network
-        base_reg = torch.norm(parameters_to_vector(base.values()), p=2)
+        base_reg = torch.norm(parameters_to_vector(base), p=2)
 
         # Entropy regularization for generated weights
         # generated_weights = torch.cat([p.view(-1) for p in base.parameters()])
