@@ -172,11 +172,6 @@ def print_optimized_parameters(optimizer):
                 print(f"    Requires grad: {p.requires_grad}")
                 print()
 
-
-
-
-
-
 optimizer = optim.AdamW(trainable_params, lr=1e-2, weight_decay=1e-3)
 # Call the function to print the parameters
 print_optimized_parameters(optimizer)
@@ -248,6 +243,8 @@ total = 0
 with torch.no_grad():
     for data in test_loader:
         images, labels = data
+        images = images.to(device)
+        labels = labels.to(device)
         outputs = base(images)
         _, predicted = torch.max(outputs.data, 1)
         total += labels.size(0)

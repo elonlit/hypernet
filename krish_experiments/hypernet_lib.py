@@ -75,11 +75,13 @@ class SharedEmbeddingUpdateParams(nn.Module):
             assert embed.shape == (self.module.num_embeddings, *self.module.embedding_dim)
 
             out = torch.func.functional_call(self.module.weight_generator, params, (embed,))
+            DynamicSharedEmbedding.add_to_predicted_param_list(out)
             # Propagate the updated parameters
             return self.module.propagate(prev_params, out, raw, embed, *args, **kwargs)
         elif isinstance(self.module, BaseNet):
             assert raw.shape[1:] == self.module.input_dim
 
+            DynamicSharedEmbedding.add_to_predicted_param_list(params)
             out = torch.func.functional_call(self.module.weight_generator, params, (raw, *args), kwargs)
             return out
 
@@ -164,12 +166,24 @@ class DynamicSharedEmbedding(SharedEmbedding):
         self.batch_size = input_shape[0]
         self.top_hypernet = top_hypernet
         self.build(input_shape, input_shape[1:])
+        global predicted_param_list
+        predicted_param_list = []
     
+    @staticmethod
+    def get_predicted_param_list():
+        return predicted_param_list
+
+    @staticmethod
+    def add_to_predicted_param_list(param):
+        predicted_param_list.append(param)
+
     def create_params(self):
         raise NotImplementedError("Subclasses implement this method to initialize the weight generator.")
     
     def embed_and_propagate(self, raw):
         assert raw.shape[0] <= self.batch_size
+
+        predicted_param_list.clear()
         
         padded = raw
         diff = self.batch_size - padded.shape[0]
