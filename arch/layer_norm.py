@@ -43,11 +43,13 @@ class AvgPoolHyperNet(SharedEmbeddingHyperNet):
                 # very tiny CNN
                 self.conv1 = nn.Conv2d(1, final_channel_dim, 3, 1, 1)
                 self.pool = nn.AdaptiveAvgPool2d((pool_size, pool_size))
-                self.layer_norm = nn.LayerNorm([final_channel_dim, pool_size, pool_size], elementwise_affine=False)
+                print(final_channel_dim)
+                self.layer_norm = nn.InstanceNorm2d(final_channel_dim, affine=True)
             
             def forward(self, x):
                 x = F.relu(self.conv1(x))
                 x = self.pool(x)
+                # print(x.shape)
                 x = self.layer_norm(x)
 
                 return x

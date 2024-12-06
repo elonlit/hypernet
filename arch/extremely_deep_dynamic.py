@@ -18,8 +18,8 @@ from math import ceil
 from itertools import chain
 
 from krish_experiments.hypernet_lib import BaseNet, SharedEmbeddingHyperNet, DynamicSharedEmbedding
-torch.manual_seed(7)
-np.random.seed(7)
+torch.manual_seed(42)
+np.random.seed(42)
 
 class Lowest(BaseNet):
     def create_params(self):

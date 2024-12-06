@@ -106,9 +106,9 @@ class SharedEmbeddingHyperNet(HyperNet):
     
     def propagate(self, prev_params, out, raw, embed, *args, **kwargs):
         prev_params.append(torch.nn.utils.parameters_to_vector(self.weight_generator.parameters()))
-        print(f"\n\n\n\n\n")
-        print(f"The network: {self.weight_generator} is predicting some weights which are now added to predicted_param_list.\
-                The first network should be hypernetwork four and the last network should be hypernetwork one")
+        # print(f"\n\n\n\n\n")
+        # print(f"The network: {self.weight_generator} is predicting some weights which are now added to predicted_param_list.\
+        #         The first network should be hypernetwork four and the last network should be hypernetwork one")
         DynamicSharedEmbedding.add_to_predicted_param_list(out)
         # print(self.num_backward_connections, self)
         
