@@ -165,7 +165,7 @@ trainable_params = chain(embed.weight_generator.parameters(), four.weight_genera
                         [one.res_connection_vector], [base.res_connection_vector])
 
 optimizer = optim.AdamW(trainable_params, lr=1e-3, weight_decay=1e-3)
-scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+# scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
 
 for ep in tq:
     for i, (x_batch, y_batch) in enumerate(train_loader):
@@ -181,7 +181,7 @@ for ep in tq:
 
         optimizer.step()
 
-    scheduler.step()
+    # scheduler.step()
     tq.set_postfix(loss=loss.item())
 # Evaluate the hypernetwork
 correct = 0

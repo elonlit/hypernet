@@ -194,7 +194,7 @@ optimizer = optim.AdamW(trainable_params, lr=1e-3, weight_decay=0)
 # optimizer = optim.Adam(trainable_params, lr=1e-3)
 # Call the function to print the parameters
 print_optimized_parameters(optimizer)
-scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+# scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
 
 
 class HierarchicalRegularizedLoss(nn.Module):
@@ -276,7 +276,7 @@ for ep in tq:
         for k, v in loss_components.items():
             epoch_losses[k] += v
 
-    scheduler.step()
+    # scheduler.step()
 
     # Calculate average losses for the epoch
     avg_losses = {k: v / len(train_loader) for k, v in epoch_losses.items()}
