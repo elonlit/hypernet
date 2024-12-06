@@ -75,13 +75,13 @@ class SharedEmbeddingUpdateParams(nn.Module):
             assert embed.shape == (self.module.num_embeddings, *self.module.embedding_dim)
 
             out = torch.func.functional_call(self.module.weight_generator, params, (embed,))
-            DynamicSharedEmbedding.add_to_predicted_param_list(out)
+            # DynamicSharedEmbedding.add_to_predicted_param_list(out)
             # Propagate the updated parameters
             return self.module.propagate(prev_params, out, raw, embed, *args, **kwargs)
         elif isinstance(self.module, BaseNet):
             assert raw.shape[1:] == self.module.input_dim
 
-            DynamicSharedEmbedding.add_to_predicted_param_list(params)
+            # DynamicSharedEmbedding.add_to_predicted_param_list(params)
             out = torch.func.functional_call(self.module.weight_generator, params, (raw, *args), kwargs)
             return out
 
@@ -101,10 +101,18 @@ class SharedEmbeddingHyperNet(HyperNet):
         assert embed.shape == (self.num_embeddings, *self.embedding_dim)
         
         out = self.weight_generator.forward(embed)
+        # predicted_param_list.append(torch.nn.utils.parameters_to_vector(out))
         return self.propagate([], out, raw, embed, *args, **kwargs)
     
     def propagate(self, prev_params, out, raw, embed, *args, **kwargs):
         prev_params.append(torch.nn.utils.parameters_to_vector(self.weight_generator.parameters()))
+        print(f"\n\n\n\n\n")
+        print(f"The network: {self.weight_generator} is predicting some weights which are now added to predicted_param_list.\
+                The first network should be hypernetwork four and the last network should be hypernetwork one")
+        DynamicSharedEmbedding.add_to_predicted_param_list(out)
+        # print(self.num_backward_connections, self)
+        
+
         return self.target_param_updater(prev_params, out.view(-1), raw, embed, *args, **kwargs)
 
 class SharedEmbedding(nn.Module):
