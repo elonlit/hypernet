@@ -20,7 +20,14 @@ class HyperNet(BaseNet):
         super().__init__(num_backward_connections, connection_type, device)
         self._target_network = target_network
 
-def runtime_candidate(module, params, prev_out, final_addition):
+def runtime_candidate(module, all_params, residual_params, params, prev_out):
+    pooled_addition = module.pool_to_param_shape(torch.stack(all_params[module.net_depth+1:module.net_depth+1 + module.num_backward_connections]))
+
+    weighted_addition = pooled_addition * residual_params[module.net_depth][module.net_depth:module.net_depth + module.num_backward_connections][:, None]
+    # (num_backward_connections, current num_weight_gen_params)
+    # average to get rid of first dimension
+    final_addition = weighted_addition.mean(dim=0)
+
     start = 0
     curr_param_vector = torch.zeros(module.num_weight_gen_params, device=module.device)
     for name, p in module.weight_generator.named_parameters():
@@ -41,12 +48,7 @@ class SharedEmbeddingUpdateParams(nn.Module):
 
     def forward(self, all_params, residual_params, prev_out: torch.Tensor, raw: torch.Tensor, embed: torch.Tensor, *args, **kwargs):
         # connect `min(num_backward_connections, len(prev_params))` previous params to the current ones
-        pooled_addition = self.module.pool_to_param_shape(torch.stack(all_params[self.module.net_depth+1:self.module.net_depth+1 + self.module.num_backward_connections]))
         
-        weighted_addition = pooled_addition * residual_params[self.module.net_depth][self.module.net_depth:self.module.net_depth + self.module.num_backward_connections][:, None]
-        # (num_backward_connections, current num_weight_gen_params)
-        # average to get rid of first dimension
-        final_addition = weighted_addition.mean(dim=0)
         
         params = {}
         start = 0
@@ -60,7 +62,7 @@ class SharedEmbeddingUpdateParams(nn.Module):
             start = end"""
         
         # all_params[self.module.net_depth] = self.module.pool_to_max_params(curr_param_vector.view(1, -1)).view(-1)
-        all_params[self.module.net_depth] = runtime_candidate(self.module, params, prev_out, final_addition)
+        all_params[self.module.net_depth] = runtime_candidate(self.module, all_params, residual_params, params, prev_out)
         
         if isinstance(self.module, SharedEmbeddingHyperNet):
             out = torch.func.functional_call(self.module.weight_generator, params, (embed,))
