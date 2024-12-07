@@ -79,8 +79,7 @@ num_epochs = 25
 tq = tqdm(range(num_epochs))
 
 # Train the hypernetwork
-trainable_params = chain(embed.weight_generator.parameters(), two.weight_generator.parameters())
-optimizer = optim.AdamW(trainable_params, lr=1e-2, weight_decay=1e-3)
+optimizer = optim.AdamW(embed.parameters(), lr=1e-2, weight_decay=1e-3)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
 
 for ep in tq:

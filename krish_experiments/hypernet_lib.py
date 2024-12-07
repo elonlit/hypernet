@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+from itertools import chain
+
 class BaseNet(nn.Module):
     def __init__(self, num_backward_connections=0, connection_type="avg", device="cpu"):
         super().__init__()
@@ -20,25 +22,6 @@ class HyperNet(BaseNet):
         super().__init__(num_backward_connections, connection_type, device)
         self._target_network = target_network
 
-def runtime_candidate(module, all_params, residual_params, params, prev_out):
-    pooled_addition = module.pool_to_param_shape(torch.stack(all_params[module.net_depth+1:module.net_depth+1 + module.num_backward_connections]))
-
-    weighted_addition = pooled_addition * residual_params[module.net_depth][module.net_depth:module.net_depth + module.num_backward_connections][:, None]
-    # (num_backward_connections, current num_weight_gen_params)
-    # average to get rid of first dimension
-    final_addition = weighted_addition.mean(dim=0)
-
-    start = 0
-    curr_param_vector = torch.zeros(module.num_weight_gen_params, device=module.device)
-    for name, p in module.weight_generator.named_parameters():
-        end = start + np.prod(p.size())
-        curr_param = prev_out[start:end] + final_addition[start:end]
-        curr_param_vector[start:end] = curr_param
-        params[name] = curr_param.view(p.size())
-        start = end
-    
-    return module.pool_to_max_params(curr_param_vector.view(1, -1)).view(-1)
-
 class SharedEmbeddingUpdateParams(nn.Module):
     """This class updates the parameters of the target network using the output of the previous weight generator."""
     
@@ -48,21 +31,25 @@ class SharedEmbeddingUpdateParams(nn.Module):
 
     def forward(self, all_params, residual_params, prev_out: torch.Tensor, raw: torch.Tensor, embed: torch.Tensor, *args, **kwargs):
         # connect `min(num_backward_connections, len(prev_params))` previous params to the current ones
+        pooled_addition = self.module.pool_to_param_shape(torch.stack(all_params[self.module.net_depth+1:self.module.net_depth+1 + self.module.num_backward_connections]))
         
+        weighted_addition = pooled_addition * residual_params[self.module.net_depth][self.module.net_depth:self.module.net_depth + self.module.num_backward_connections][:, None]
+        # (num_backward_connections, current num_weight_gen_params)
+        # average to get rid of first dimension
+        final_addition = weighted_addition.mean(dim=0)
         
         params = {}
         start = 0
         # tensor of shape (num_weight_gen_params,)
-        """curr_param_vector = torch.zeros(self.module.num_weight_gen_params, device=self.module.device)
+        curr_param_vector = torch.zeros(self.module.num_weight_gen_params, device=self.module.device)
         for name, p in self.module.weight_generator.named_parameters():
             end = start + np.prod(p.size())
             curr_param = prev_out[start:end] + final_addition[start:end]
             curr_param_vector[start:end] = curr_param
             params[name] = curr_param.view(p.size())
-            start = end"""
+            start = end
         
-        # all_params[self.module.net_depth] = self.module.pool_to_max_params(curr_param_vector.view(1, -1)).view(-1)
-        all_params[self.module.net_depth] = runtime_candidate(self.module, all_params, residual_params, params, prev_out)
+        all_params[self.module.net_depth] = self.module.pool_to_max_params(curr_param_vector.view(1, -1)).view(-1)
         
         if isinstance(self.module, SharedEmbeddingHyperNet):
             out = torch.func.functional_call(self.module.weight_generator, params, (embed,))
@@ -158,6 +145,9 @@ class SharedEmbedding(nn.Module):
 
         self.all_params = [None for _ in range(self.net_depth)]
         self.residual_params = nn.Parameter(torch.triu(torch.randn(net_depth, net_depth-1, device=self.device)))
+    
+    def parameters(self):
+        return chain(self.weight_generator.parameters(), [self.residual_params], self.top_hypernet.weight_generator.parameters())
 
 # --------------------------------------------------------------------------------
 #             SHARED EMBEDDING DYNAMIC HYPERNETWORK ARCHITECTURE

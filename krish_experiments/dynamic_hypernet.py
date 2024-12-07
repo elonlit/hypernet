@@ -143,10 +143,7 @@ num_epochs = 25
 tq = tqdm(range(num_epochs))
 
 # Train the hypernetwork
-# trainable_params = chain(embed.weight_generator.parameters(), two.weight_generator.parameters(), two.res_connection_vector, one.res_connection_vector, base.res_connection_vector)
-trainable_params = [p for p in chain(embed.weight_generator.parameters(), two.weight_generator.parameters(), [embed.residual_params])]
-# for param in trainable_params:
-#     print(param.is_leaf)
+
 def print_optimized_parameters(optimizer):
     print("Parameters being optimized:")
     for i, param_group in enumerate(optimizer.param_groups):
@@ -172,7 +169,7 @@ def print_optimized_parameters(optimizer):
                 print(f"    Requires grad: {p.requires_grad}")
                 print()
 
-optimizer = optim.AdamW(trainable_params, lr=1e-2, weight_decay=1e-3)
+optimizer = optim.AdamW(embed.parameters(), lr=1e-2, weight_decay=1e-3)
 # Call the function to print the parameters
 print_optimized_parameters(optimizer)
 
