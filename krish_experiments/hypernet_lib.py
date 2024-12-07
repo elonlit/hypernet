@@ -34,7 +34,7 @@ class SharedEmbeddingUpdateParams(nn.Module):
         weighted_addition = pooled_addition * residual_params[self.module.net_depth][self.module.net_depth:self.module.net_depth + self.module.num_backward_connections][:, None]
         # (num_backward_connections, current num_weight_gen_params)
         # average to get rid of first dimension
-        final_addition = weighted_addition.sum(dim=0)
+        final_addition = weighted_addition.mean(dim=0)
         
         params = {}
         start = 0
