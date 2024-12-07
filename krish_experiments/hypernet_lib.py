@@ -20,6 +20,18 @@ class HyperNet(BaseNet):
         super().__init__(num_backward_connections, connection_type, device)
         self._target_network = target_network
 
+def runtime_candidate(module, params, prev_out, final_addition):
+    start = 0
+    curr_param_vector = torch.zeros(module.num_weight_gen_params, device=module.device)
+    for name, p in module.weight_generator.named_parameters():
+        end = start + np.prod(p.size())
+        curr_param = prev_out[start:end] + final_addition[start:end]
+        curr_param_vector[start:end] = curr_param
+        params[name] = curr_param.view(p.size())
+        start = end
+    
+    return module.pool_to_max_params(curr_param_vector.view(1, -1)).view(-1)
+
 class SharedEmbeddingUpdateParams(nn.Module):
     """This class updates the parameters of the target network using the output of the previous weight generator."""
     
@@ -39,15 +51,16 @@ class SharedEmbeddingUpdateParams(nn.Module):
         params = {}
         start = 0
         # tensor of shape (num_weight_gen_params,)
-        curr_param_vector = torch.zeros(self.module.num_weight_gen_params, device=self.module.device)
+        """curr_param_vector = torch.zeros(self.module.num_weight_gen_params, device=self.module.device)
         for name, p in self.module.weight_generator.named_parameters():
             end = start + np.prod(p.size())
             curr_param = prev_out[start:end] + final_addition[start:end]
             curr_param_vector[start:end] = curr_param
             params[name] = curr_param.view(p.size())
-            start = end
+            start = end"""
         
-        all_params[self.module.net_depth] = self.module.pool_to_max_params(curr_param_vector.view(1, -1)).view(-1)
+        # all_params[self.module.net_depth] = self.module.pool_to_max_params(curr_param_vector.view(1, -1)).view(-1)
+        all_params[self.module.net_depth] = runtime_candidate(self.module, params, prev_out, final_addition)
         
         if isinstance(self.module, SharedEmbeddingHyperNet):
             out = torch.func.functional_call(self.module.weight_generator, params, (embed,))
