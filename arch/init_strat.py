@@ -149,7 +149,7 @@ class LinearSharedEmbedding(DynamicSharedEmbedding):
 
         self.weight_generator = WeightGenerator(self.batch_size)
 
-device = torch.device("cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Device: {device}")
 
 # we can set num_backward_connection=2 because in the library,
@@ -194,15 +194,14 @@ num_epochs = 25
 tq = tqdm(range(num_epochs))
 
 # Train the hypernetwork
-trainable_params = chain(embed.weight_generator.parameters(), four.weight_generator.parameters(),
-                        [four.res_connection_vector], [three.res_connection_vector], [two.res_connection_vector],
-                        [one.res_connection_vector], [base.res_connection_vector])
+trainable_params = chain(embed.weight_generator.parameters(), four.weight_generator.parameters(), [embed.residual_params])
 
 optimizer = optim.AdamW(trainable_params, lr=1e-3, weight_decay=1e-3)
 # scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
 
 for ep in tq:
     for i, (x_batch, y_batch) in enumerate(train_loader):
+        print(i)
         x_batch = x_batch.to(device)
         y_batch = y_batch.to(device)
         
