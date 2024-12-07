@@ -144,7 +144,7 @@ tq = tqdm(range(num_epochs))
 
 # Train the hypernetwork
 # trainable_params = chain(embed.weight_generator.parameters(), two.weight_generator.parameters(), two.res_connection_vector, one.res_connection_vector, base.res_connection_vector)
-trainable_params = [p for p in chain(embed.weight_generator.parameters(), two.weight_generator.parameters(), [two.res_connection_vector], [one.res_connection_vector], [base.res_connection_vector]) if p.is_leaf]
+trainable_params = [p for p in chain(embed.weight_generator.parameters(), two.weight_generator.parameters(), [embed.residual_params])]
 # for param in trainable_params:
 #     print(param.is_leaf)
 def print_optimized_parameters(optimizer):

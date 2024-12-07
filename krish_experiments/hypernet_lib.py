@@ -9,79 +9,50 @@ class BaseNet(nn.Module):
         self.num_backward_connections = num_backward_connections
         self.connection_type = connection_type
         self.device = device
-        self.res_connection_vector = nn.Parameter(torch.randn(num_backward_connections, device=device, requires_grad=True))
 
     def create_params(self):
         raise NotImplementedError("Subclasses implement this method to initialize the weight generator network.")
 
 class HyperNet(BaseNet):
     """General HyperNetwork class"""
+    
     def __init__(self, target_network, num_backward_connections=0, connection_type="avg", device="cpu"):
         super().__init__(num_backward_connections, connection_type, device)
         self._target_network = target_network
 
 class SharedEmbeddingUpdateParams(nn.Module):
     """This class updates the parameters of the target network using the output of the previous weight generator."""
+    
     def __init__(self, module: nn.Module):
-        """This function initializes the class
-
-        Args:
-            module (nn.Module): The target network whose parameters are to be updated
-        """
         super().__init__()
         self.module = module
 
-    def forward(self, prev_params, param_vector: torch.Tensor, raw: torch.Tensor, embed: torch.Tensor, *args, **kwargs):
-        """This function updates the parameters of the target network using the output of the weight generator,
-        the previous parameters, the raw data, and the embedding, and propagates the updated parameters.
-
-        Args:
-            prev_params (list): a list of previous parameters
-            param_vector (torch.Tensor): the output of the weight generator
-            raw (torch.Tensor): the raw data
-            embed (torch.Tensor): the embedding
-
-        Raises:
-            ValueError: _description_
-
-        Returns:
-            _type_: _description_
-        """
-        if self.module.connection_type == "avg":
-            pool_layer = nn.AdaptiveAvgPool1d(param_vector.shape[0])
-        elif self.module.connection_type == "max":
-            pool_layer = nn.AdaptiveMaxPool1d(param_vector.shape[0])
-        else:
-            raise ValueError("Invalid connection type")
-
-        addition_vectors = []
+    def forward(self, all_params, residual_params, prev_out: torch.Tensor, raw: torch.Tensor, embed: torch.Tensor, *args, **kwargs):
         # connect `min(num_backward_connections, len(prev_params))` previous params to the current ones
-        for i in range(max(len(prev_params) - self.module.num_backward_connections, 0), len(prev_params)):
-            addition_vector = prev_params[i].view(1, -1)
-            addition_vector = pool_layer(addition_vector).view(-1)
-            addition_vectors.append(addition_vector)
+        pooled_addition = self.module.pool_to_param_shape(torch.stack(all_params[self.module.net_depth+1:self.module.net_depth+1 + self.module.num_backward_connections]))
+        
+        weighted_addition = pooled_addition * residual_params[self.module.net_depth][self.module.net_depth:self.module.net_depth + self.module.num_backward_connections][:, None]
+        # (num_backward_connections, current num_weight_gen_params)
+        # average to get rid of first dimension
+        final_addition = weighted_addition.sum(dim=0)
         
         params = {}
         start = 0
+        # tensor of shape (num_weight_gen_params,)
+        curr_param_vector = torch.zeros(self.module.num_weight_gen_params, device=self.module.device)
         for name, p in self.module.weight_generator.named_parameters():
             end = start + np.prod(p.size())
-            params[name] = param_vector[start:end].view(p.size())
-            for i, addition_vector in enumerate(addition_vectors):
-                addition_vector *= self.module.res_connection_vector[i]
-                params[name] += addition_vector[start:end].view(p.size())
+            curr_param = prev_out[start:end] + final_addition[start:end]
+            curr_param_vector[start:end] = curr_param
+            params[name] = curr_param.view(p.size())
             start = end
         
+        all_params[self.module.net_depth] = self.module.pool_to_max_params(curr_param_vector.view(1, -1)).view(-1)
+        
         if isinstance(self.module, SharedEmbeddingHyperNet):
-            assert embed.shape == (self.module.num_embeddings, *self.module.embedding_dim)
-
             out = torch.func.functional_call(self.module.weight_generator, params, (embed,))
-            # DynamicSharedEmbedding.add_to_predicted_param_list(out)
-            # Propagate the updated parameters
-            return self.module.propagate(prev_params, out, raw, embed, *args, **kwargs)
+            return self.module.propagate(all_params, residual_params, out, raw, embed, *args, **kwargs)
         elif isinstance(self.module, BaseNet):
-            assert raw.shape[1:] == self.module.input_dim
-
-            # DynamicSharedEmbedding.add_to_predicted_param_list(params)
             out = torch.func.functional_call(self.module.weight_generator, params, (raw, *args), kwargs)
             return out
 
@@ -92,34 +63,27 @@ class SharedEmbeddingHyperNet(HyperNet):
     number of parameters in the (n-1)th HyperNet. The output network is fed in the full data,
     from which it makes a prediction.
     """
+
     def __init__(self, target_network, num_backward_connections=0, connection_type="avg", device="cpu"):
         super().__init__(target_network, num_backward_connections, connection_type, device)
         self.target_param_updater = SharedEmbeddingUpdateParams(target_network)
-        self.res_connection_vector = nn.Parameter(torch.randn(num_backward_connections, device=device, requires_grad=True))
 
-    def propagate_forward(self, raw, embed, *args, **kwargs):
-        assert embed.shape == (self.num_embeddings, *self.embedding_dim)
+    def propagate_forward(self, all_params, residual_params, raw, embed, *args, **kwargs):
+        param_vector = nn.utils.parameters_to_vector(self.weight_generator.parameters())
+        all_params[self.net_depth] = self.pool_to_max_params(param_vector.view(1, -1)).view(-1)
         
         out = self.weight_generator.forward(embed)
-        # predicted_param_list.append(torch.nn.utils.parameters_to_vector(out))
-        return self.propagate([], out, raw, embed, *args, **kwargs)
+        return self.propagate(all_params, residual_params, out, raw, embed, *args, **kwargs)
     
-    def propagate(self, prev_params, out, raw, embed, *args, **kwargs):
-        prev_params.append(torch.nn.utils.parameters_to_vector(self.weight_generator.parameters()))
-        # print(f"\n\n\n\n\n")
-        # print(f"The network: {self.weight_generator} is predicting some weights which are now added to predicted_param_list.\
-        #         The first network should be hypernetwork four and the last network should be hypernetwork one")
-        DynamicSharedEmbedding.add_to_predicted_param_list(out)
-        # print(self.num_backward_connections, self)
-        
-
-        return self.target_param_updater(prev_params, out.view(-1), raw, embed, *args, **kwargs)
+    def propagate(self, all_params, residual_params, out, raw, embed, *args, **kwargs):
+        return self.target_param_updater(all_params, residual_params, out.view(-1), raw, embed, *args, **kwargs)
 
 class SharedEmbedding(nn.Module):
-    def __init__(self, top_hypernet, num_embeddings):
+    def __init__(self, top_hypernet, num_embeddings, device="cpu"):
         super().__init__()
         self.top_hypernet = top_hypernet
         self.num_embeddings = num_embeddings
+        self.device = device
     
     def create_params(self):
         raise NotImplementedError("Subclasses implement this method to initialize the weight generator network.")
@@ -148,13 +112,37 @@ class SharedEmbedding(nn.Module):
         curr_hypernet.input_dim = input_shape[1:]
         _hypernet_stack.append(curr_hypernet)
 
-        while _hypernet_stack:
-            curr_hypernet = _hypernet_stack.pop()
-
+        max_num_weight_gen_params = 0
+        for curr_hypernet in reversed(_hypernet_stack):
             if isinstance(curr_hypernet, SharedEmbeddingHyperNet):
                 curr_hypernet.num_params_to_estimate = curr_hypernet._target_network.num_weight_gen_params
-
+            
             SharedEmbedding.build_weight_generator(curr_hypernet)
+
+            if curr_hypernet.connection_type == "avg":
+                curr_hypernet.pool_to_param_shape = nn.AdaptiveAvgPool1d(curr_hypernet.num_weight_gen_params)
+            elif curr_hypernet.connection_type == "max":
+                curr_hypernet.pool_to_param_shape = nn.AdaptiveMaxPool1d(curr_hypernet.num_weight_gen_params)
+            else:
+                raise ValueError(f"Invalid connection type: {curr_hypernet.connection_type}")
+
+            max_num_weight_gen_params = max(max_num_weight_gen_params, curr_hypernet.num_weight_gen_params)
+        
+        net_depth = 0
+        while _hypernet_stack:
+            curr_hypernet = _hypernet_stack.pop()
+            curr_hypernet.max_num_weight_gen_params = max_num_weight_gen_params
+
+            curr_hypernet.pool_to_max_params = nn.AdaptiveAvgPool1d(max_num_weight_gen_params)
+
+            curr_hypernet.net_depth = net_depth
+            net_depth += 1
+        
+        self.net_depth = net_depth
+        self.max_num_weight_gen_params = max_num_weight_gen_params
+
+        self.all_params = [None for _ in range(self.net_depth)]
+        self.residual_params = nn.Parameter(torch.triu(torch.randn(net_depth, net_depth-1, device=self.device)))
 
 # --------------------------------------------------------------------------------
 #             SHARED EMBEDDING DYNAMIC HYPERNETWORK ARCHITECTURE
@@ -174,24 +162,12 @@ class DynamicSharedEmbedding(SharedEmbedding):
         self.batch_size = input_shape[0]
         self.top_hypernet = top_hypernet
         self.build(input_shape, input_shape[1:])
-        global predicted_param_list
-        predicted_param_list = []
-    
-    @staticmethod
-    def get_predicted_param_list():
-        return predicted_param_list
-
-    @staticmethod
-    def add_to_predicted_param_list(param):
-        predicted_param_list.append(param)
 
     def create_params(self):
         raise NotImplementedError("Subclasses implement this method to initialize the weight generator.")
     
     def embed_and_propagate(self, raw):
         assert raw.shape[0] <= self.batch_size
-
-        predicted_param_list.clear()
         
         padded = raw
         diff = self.batch_size - padded.shape[0]
@@ -202,7 +178,7 @@ class DynamicSharedEmbedding(SharedEmbedding):
             padded = F.pad(padded, (*num_no_pads, 0, diff))
         
         embed = self.weight_generator.forward(padded, diff)
-        return self.top_hypernet.propagate_forward(raw, embed)
+        return self.top_hypernet.propagate_forward(self.all_params, self.residual_params, raw, embed)
 
 # --------------------------------------------------------------------------------
 #             SHARED EMBEDDING STATIC HYPERNETWORK ARCHITECTURE
@@ -229,4 +205,4 @@ class StaticSharedEmbedding(SharedEmbedding):
     
     def embed_and_propagate(self, raw):
         embed = self.weight_generator(self.context_vector)
-        return self.top_hypernet.propagate_forward(raw, embed)
+        return self.top_hypernet.propagate_forward(self.all_params, self.residual_params, raw, embed)
